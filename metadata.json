@@ -1,0 +1,6 @@
+{
+  "name": "TailNode - Ubuntu Desktop Web Host & cPanel",
+  "description": "Modern self-hosted web app & Node.js hosting cPanel for AMD64 Ubuntu Desktop with Tailscale public access and 2GB isolated storage quota.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
