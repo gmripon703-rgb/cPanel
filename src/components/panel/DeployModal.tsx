@@ -8,7 +8,11 @@ import {
   Server, 
   Code, 
   Cpu, 
-  ExternalLink 
+  ExternalLink,
+  ShoppingCart,
+  FileCode,
+  Zap,
+  Cloud
 } from 'lucide-react';
 import { HostedApp } from '../../types/hosting';
 
@@ -26,10 +30,11 @@ export const DeployModal: React.FC<DeployModalProps> = ({
   nextPort,
 }) => {
   const [name, setName] = useState('');
-  const [type, setType] = useState<'express' | 'react' | 'nodejs' | 'static'>('express');
+  const [type, setType] = useState<'express' | 'react' | 'nodejs' | 'static' | 'flask' | 'python'>('express');
   const [port, setPort] = useState(nextPort.toString());
   const [gitRepo, setGitRepo] = useState('');
-  const [nodeVersion, setNodeVersion] = useState('v20.18.0');
+  const [runtimeVersion, setRuntimeVersion] = useState('Node.js v20.18.0');
+  const [activeTunnel, setActiveTunnel] = useState<'cloudflare' | 'tailscale' | 'ngrok'>('cloudflare');
   const [enableFunnel, setEnableFunnel] = useState(true);
   const [envString, setEnvString] = useState('NODE_ENV=production\nPORT=' + nextPort);
 
@@ -53,7 +58,8 @@ export const DeployModal: React.FC<DeployModalProps> = ({
       type,
       port: parseInt(port, 10) || nextPort,
       gitRepo: gitRepo.trim(),
-      nodeVersion,
+      runtimeVersion,
+      activeTunnel,
       funnelEnabled: enableFunnel,
       env: envMap
     });
@@ -61,91 +67,136 @@ export const DeployModal: React.FC<DeployModalProps> = ({
     onClose();
   };
 
-  const selectPreset = (presetType: 'express' | 'react' | 'nodejs' | 'static') => {
-    setType(presetType);
-    if (presetType === 'express') {
-      setName('my-express-api');
-      setEnvString(`NODE_ENV=production\nPORT=${port}\nCORS_ORIGIN=*`);
-    } else if (presetType === 'react') {
-      setName('my-react-app');
+  const selectPreset = (preset: string) => {
+    if (preset === 'wordpress') {
+      setType('nodejs');
+      setName('my-wordpress-blog');
+      setRuntimeVersion('PHP 8.2 (SQLite Engine)');
+      setEnvString(`WP_ENV=production\nPORT=${port}\nDB_ENGINE=sqlite`);
+    } else if (preset === 'cart') {
+      setType('express');
+      setName('my-shopping-cart');
+      setRuntimeVersion('Node.js v20.18.0');
+      setEnvString(`NODE_ENV=production\nPORT=${port}\nSTORE_NAME="TailShop"\nCURRENCY=USD`);
+    } else if (preset === 'php') {
+      setType('nodejs');
+      setName('my-php-site');
+      setRuntimeVersion('PHP 8.2 CLI/FPM');
+      setEnvString(`PHP_ENV=production\nPORT=${port}`);
+    } else if (preset === 'flask') {
+      setType('flask');
+      setName('my-flask-app');
+      setRuntimeVersion('Python 3.12 (Flask/Gunicorn)');
+      setEnvString(`FLASK_ENV=production\nPORT=${port}\nPYTHONUNBUFFERED=1`);
+    } else if (preset === 'react') {
+      setType('react');
+      setName('my-react-spa');
+      setRuntimeVersion('Node.js v22.12.0 (Vite)');
       setEnvString(`NODE_ENV=production\nVITE_PORT=${port}`);
-    } else if (presetType === 'nodejs') {
-      setName('my-node-daemon');
-      setEnvString(`NODE_ENV=production\nINTERVAL=5000`);
+    } else if (preset === 'express') {
+      setType('express');
+      setName('my-express-api');
+      setRuntimeVersion('Node.js v20.18.0');
+      setEnvString(`NODE_ENV=production\nPORT=${port}\nCORS_ORIGIN=*`);
     } else {
+      setType('static');
       setName('my-static-site');
+      setRuntimeVersion('Static Proxy');
       setEnvString(`PORT=${port}`);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-      <div className="w-full max-w-xl rounded-xl border border-neutral-800 bg-neutral-900 p-6 space-y-5 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="w-full max-w-xl rounded-xl border border-neutral-800 bg-neutral-900 p-6 space-y-5 shadow-2xl my-6">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-base font-semibold text-white">Deploy Web App on Ubuntu Desktop</h3>
+            <h3 className="text-base font-semibold text-white">Deploy Web App / Script on Host</h3>
           </div>
           <button onClick={onClose} className="text-neutral-400 hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Preset Cards */}
+        {/* 1-Click Script & Stack Shortcuts */}
         <div className="space-y-1.5">
-          <label className="text-xs font-mono text-neutral-400">SELECT APPLICATION STACK</label>
+          <label className="text-xs font-mono text-neutral-400">1-CLICK SCRIPT PRESETS</label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
               type="button"
-              onClick={() => selectPreset('express')}
-              className={`p-2.5 rounded-lg border text-left transition-all ${
-                type === 'express'
-                  ? 'border-cyan-500/60 bg-cyan-500/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white hover:border-neutral-700'
-              }`}
+              onClick={() => selectPreset('wordpress')}
+              className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-cyan-500/50 hover:bg-neutral-900 text-left transition-all"
             >
-              <div className="text-xs font-semibold">Express API</div>
-              <div className="text-[10px] text-neutral-500">Node backend</div>
+              <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-cyan-400" />
+                <span>WordPress</span>
+              </div>
+              <div className="text-[10px] text-neutral-500">PHP + SQLite</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selectPreset('cart')}
+              className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-cyan-500/50 hover:bg-neutral-900 text-left transition-all"
+            >
+              <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <ShoppingCart className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Shop / Cart</span>
+              </div>
+              <div className="text-[10px] text-neutral-500">Web Storefront</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selectPreset('flask')}
+              className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-cyan-500/50 hover:bg-neutral-900 text-left transition-all"
+            >
+              <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5 text-amber-400" />
+                <span>Python Flask</span>
+              </div>
+              <div className="text-[10px] text-neutral-500">WSGI microservice</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selectPreset('php')}
+              className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-cyan-500/50 hover:bg-neutral-900 text-left transition-all"
+            >
+              <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <FileCode className="h-3.5 w-3.5 text-indigo-400" />
+                <span>PHP Web</span>
+              </div>
+              <div className="text-[10px] text-neutral-500">Native PHP script</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selectPreset('express')}
+              className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-cyan-500/50 hover:bg-neutral-900 text-left transition-all"
+            >
+              <div className="text-xs font-semibold text-white">Express API</div>
+              <div className="text-[10px] text-neutral-500">Node.js backend</div>
             </button>
 
             <button
               type="button"
               onClick={() => selectPreset('react')}
-              className={`p-2.5 rounded-lg border text-left transition-all ${
-                type === 'react'
-                  ? 'border-cyan-500/60 bg-cyan-500/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white hover:border-neutral-700'
-              }`}
+              className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-cyan-500/50 hover:bg-neutral-900 text-left transition-all"
             >
-              <div className="text-xs font-semibold">React / Vite</div>
+              <div className="text-xs font-semibold text-white">React / Vite</div>
               <div className="text-[10px] text-neutral-500">Frontend SPA</div>
             </button>
 
             <button
               type="button"
-              onClick={() => selectPreset('nodejs')}
-              className={`p-2.5 rounded-lg border text-left transition-all ${
-                type === 'nodejs'
-                  ? 'border-cyan-500/60 bg-cyan-500/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white hover:border-neutral-700'
-              }`}
-            >
-              <div className="text-xs font-semibold">Node Worker</div>
-              <div className="text-[10px] text-neutral-500">Bot / Cron</div>
-            </button>
-
-            <button
-              type="button"
               onClick={() => selectPreset('static')}
-              className={`p-2.5 rounded-lg border text-left transition-all ${
-                type === 'static'
-                  ? 'border-cyan-500/60 bg-cyan-500/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-white hover:border-neutral-700'
-              }`}
+              className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-cyan-500/50 hover:bg-neutral-900 text-left transition-all"
             >
-              <div className="text-xs font-semibold">Static HTML</div>
-              <div className="text-[10px] text-neutral-500">Static site</div>
+              <div className="text-xs font-semibold text-white">Static HTML</div>
+              <div className="text-[10px] text-neutral-500">Lightweight HTML</div>
             </button>
           </div>
         </div>
@@ -192,30 +243,26 @@ export const DeployModal: React.FC<DeployModalProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs text-neutral-300 font-medium">Node.js Version</label>
-              <select
-                value={nodeVersion}
-                onChange={(e) => setNodeVersion(e.target.value)}
+              <label className="text-xs text-neutral-300 font-medium">Runtime Stack</label>
+              <input
+                type="text"
+                value={runtimeVersion}
+                onChange={(e) => setRuntimeVersion(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-neutral-950 border border-neutral-800 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
-              >
-                <option value="v20.18.0">v20.18.0 (LTS Iron)</option>
-                <option value="v22.12.0">v22.12.0 (Current)</option>
-                <option value="v18.20.0">v18.20.0 (Hydrogen)</option>
-              </select>
+              />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-neutral-300 font-medium">Tailscale Funnel</label>
-              <div className="flex items-center h-9 px-3 rounded-lg bg-neutral-950 border border-neutral-800 text-xs text-neutral-300">
-                <input
-                  type="checkbox"
-                  id="funnel"
-                  checked={enableFunnel}
-                  onChange={(e) => setEnableFunnel(e.target.checked)}
-                  className="rounded border-neutral-700 text-cyan-400 focus:ring-cyan-500 mr-2"
-                />
-                <label htmlFor="funnel" className="cursor-pointer">Public HTTPS Funnel</label>
-              </div>
+              <label className="text-xs text-neutral-300 font-medium">Default HTTPS Tunnel</label>
+              <select
+                value={activeTunnel}
+                onChange={(e) => setActiveTunnel(e.target.value as any)}
+                className="w-full px-3 py-2 rounded-lg bg-neutral-950 border border-neutral-800 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
+              >
+                <option value="cloudflare">Cloudflare Tunnel (Free SSL)</option>
+                <option value="tailscale">Tailscale Funnel (MagicDNS)</option>
+                <option value="ngrok">ngrok HTTPS</option>
+              </select>
             </div>
           </div>
 
@@ -244,7 +291,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
               type="submit"
               className="px-5 py-2 text-xs font-semibold text-neutral-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors shadow-sm shadow-cyan-500/20"
             >
-              Deploy to 2GB Sandbox
+              Deploy Service to Sandbox
             </button>
           </div>
         </form>

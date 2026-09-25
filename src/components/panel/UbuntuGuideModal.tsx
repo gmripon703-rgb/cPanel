@@ -12,9 +12,11 @@ import {
   Boxes,
   Cpu,
   Layers,
-  FileCode,
-  FolderTree
+  Smartphone,
+  Cloud,
+  Zap
 } from 'lucide-react';
+import { DEVELOPER_NAME } from '../../services/api';
 
 interface UbuntuGuideModalProps {
   isOpen: boolean;
@@ -22,14 +24,14 @@ interface UbuntuGuideModalProps {
   magicDnsName: string;
 }
 
-type GuideTarget = 'mainline' | 'proot' | 'chroot' | 'rootfs' | 'tailscale';
+type GuideTarget = 'termux_pkg' | 'termux_proot' | 'mainline' | 'chroot' | 'rootfs' | 'tunnels';
 
 export const UbuntuGuideModal: React.FC<UbuntuGuideModalProps> = ({
   isOpen,
   onClose,
   magicDnsName,
 }) => {
-  const [activeTarget, setActiveTarget] = useState<GuideTarget>('mainline');
+  const [activeTarget, setActiveTarget] = useState<GuideTarget>('termux_pkg');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -41,16 +43,84 @@ export const UbuntuGuideModal: React.FC<UbuntuGuideModalProps> = ({
   };
 
   const scripts: Record<GuideTarget, { filename: string; content: string }> = {
+    termux_pkg: {
+      filename: 'install-termux-pkg.sh',
+      content: `#!/data/data/com.termux/files/usr/bin/bash
+# ==============================================================================
+# TailNode: Termux Native (Rooted & Non-Rooted) Installation
+# Developed by GM Ripon Developer
+# ==============================================================================
+set -e
+
+echo "==> [1/4] Updating Termux packages..."
+pkg update -y && pkg upgrade -y
+
+echo "==> [2/4] Installing Node.js LTS, Git, Python, and PHP..."
+pkg install -y nodejs-lts git python php curl build-essential openssh
+
+echo "==> [3/4] Setting up 2GB sandbox directory at $HOME/tailhost..."
+mkdir -p $HOME/tailhost/apps $HOME/tailhost/logs $HOME/tailhost/cache
+
+echo "==> [4/4] Cloning and building TailNode..."
+git clone https://github.com/gmripon/tailnode-host.git || true
+cd tailnode-host
+npm install
+npm run build
+
+echo "==> Installing Cloudflare tunnel for Termux public HTTPS..."
+pkg install -y cloudflared 2>/dev/null || true
+
+echo "=============================================================================="
+echo "✅ Termux Native install complete! Run: npm start"
+echo "To expose to internet via Cloudflare tunnel:"
+echo "cloudflared tunnel --url http://localhost:3000"
+echo "=============================================================================="
+`
+    },
+    termux_proot: {
+      filename: 'install-termux-proot-ubuntu24.sh',
+      content: `#!/data/data/com.termux/files/usr/bin/bash
+# ==============================================================================
+# TailNode: Termux PRoot-Distro Ubuntu 24.04 (Noble) Full Web Host
+# Developed by GM Ripon Developer
+# ==============================================================================
+set -e
+
+echo "==> [1/4] Installing PRoot-Distro in Termux..."
+pkg update -y
+pkg install -y proot-distro git curl
+
+echo "==> [2/4] Installing Ubuntu 24.04 (Noble) in PRoot..."
+proot-distro install ubuntu || true
+
+echo "==> [3/4] Bootstrapping Node.js, Python Flask & PHP inside Ubuntu 24.04..."
+proot-distro login ubuntu -- bash -c "
+  apt-get update -y && apt-get upgrade -y
+  apt-get install -y curl git build-essential nodejs npm python3 python3-pip python3-flask php php-cli
+  mkdir -p /root/tailhost/apps /root/tailhost/logs /root/tailhost/cache
+  git clone https://github.com/gmripon/tailnode-host.git /root/tailnode-host || true
+  cd /root/tailnode-host
+  npm install
+  npm run build
+"
+
+echo "==> [4/4] TailNode is installed inside Ubuntu 24.04!"
+echo "Login command: proot-distro login ubuntu"
+echo "Start command: cd /root/tailnode-host && npm start"
+`
+    },
     mainline: {
-      filename: 'install-mainline.sh',
+      filename: 'install-mainline-ubuntu.sh',
       content: `#!/usr/bin/env bash
 # ==============================================================================
 # TailNode: Mainline Native AMD64 Ubuntu Desktop / Server Setup
+# Developed by GM Ripon Developer
 # ==============================================================================
 set -e
+
 echo "==> [1/5] Updating APT & Installing system tools..."
 sudo apt-get update -y
-sudo apt-get install -y curl git build-essential
+sudo apt-get install -y curl git build-essential python3 python3-pip php php-cli
 
 echo "==> [2/5] Installing Node.js 20 LTS..."
 if ! command -v node &> /dev/null; then
@@ -58,9 +128,13 @@ if ! command -v node &> /dev/null; then
   sudo apt-get install -y nodejs
 fi
 
-echo "==> [3/5] Installing Tailscale..."
+echo "==> [3/5] Installing Tailscale & Cloudflared..."
 if ! command -v tailscale &> /dev/null; then
   curl -fsSL https://tailscale.com/install.sh | sh
+fi
+if ! command -v cloudflared &> /dev/null; then
+  curl -fsSL https://pkg.cloudflare.com/cloudflared-ascii.repo | sudo tee /etc/apt/sources.list.d/cloudflared.list 2>/dev/null || true
+  sudo apt-get install -y cloudflared 2>/dev/null || true
 fi
 
 echo "==> [4/5] Preparing 2GB sandbox directory structure..."
@@ -72,53 +146,15 @@ echo "==> [5/5] Building TailNode cPanel..."
 npm install
 npm run build
 
-echo "==> Authorizing Tailscale Funnel..."
-sudo tailscale up --operator=$USER
-tailscale funnel --bg 3000
-
 echo "✅ TailNode Mainline is ready! Run: npm start"
 `
     },
-    proot: {
-      filename: 'install-proot.sh',
-      content: `#!/usr/bin/env bash
-# ==============================================================================
-# TailNode: PRoot Rootless Setup (Termux, Android PRoot, Unprivileged Linux)
-# ==============================================================================
-set -e
-echo "==> [1/4] Installing PRoot and Node.js in userland..."
-if command -v pkg &> /dev/null; then
-  pkg update -y
-  pkg install -y proot proot-distro git nodejs-lts
-else
-  apt-get update -y && apt-get install -y proot git nodejs npm
-fi
-
-echo "==> [2/4] Setting up 2GB storage workspace..."
-mkdir -p $HOME/tailhost/apps $HOME/tailhost/logs $HOME/tailhost/cache
-
-echo "==> [3/4] Installing TailNode..."
-npm install
-npm run build
-
-echo "==> [4/4] Setting up Tailscale in userspace networking mode (no /dev/net/tun needed)..."
-if ! command -v tailscaled &> /dev/null; then
-  curl -fsSL https://pkgs.tailscale.com/stable/tailscale_latest_amd64.tgz | tar xzf -
-  cp tailscale_*/tailscale* $HOME/bin/ 2>/dev/null || true
-fi
-
-echo "To start Tailscale in userspace:"
-echo "tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &"
-echo "tailscale up"
-echo "tailscale funnel --bg 3000"
-echo "✅ PRoot installation ready! Run: npm start"
-`
-    },
     chroot: {
-      filename: 'install-chroot.sh',
+      filename: 'install-chroot-jail.sh',
       content: `#!/usr/bin/env bash
 # ==============================================================================
 # TailNode: Chroot Jail Sandbox Installation
+# Developed by GM Ripon Developer
 # ==============================================================================
 set -e
 CHROOT_DIR="/var/chroot/tailhost"
@@ -126,7 +162,7 @@ CHROOT_DIR="/var/chroot/tailhost"
 echo "==> [1/4] Bootstrapping minimal Ubuntu rootfs using debootstrap..."
 sudo apt-get update && sudo apt-get install -y debootstrap
 sudo mkdir -p $CHROOT_DIR
-sudo debootstrap --arch=amd64 jammy $CHROOT_DIR http://archive.ubuntu.com/ubuntu/
+sudo debootstrap --arch=amd64 noble $CHROOT_DIR http://archive.ubuntu.com/ubuntu/
 
 echo "==> [2/4] Binding dev, proc, sys filesystems..."
 sudo mount --bind /dev $CHROOT_DIR/dev
@@ -138,9 +174,9 @@ echo "==> [3/4] Copying TailNode into jail..."
 sudo mkdir -p $CHROOT_DIR/opt/tailnode
 sudo cp -r . $CHROOT_DIR/opt/tailnode/
 
-echo "==> [4/4] Setting up node inside chroot..."
+echo "==> [4/4] Setting up inside chroot..."
 sudo chroot $CHROOT_DIR /bin/bash -c "
-  apt-get update && apt-get install -y curl git nodejs npm
+  apt-get update && apt-get install -y curl git nodejs npm python3 php
   cd /opt/tailnode
   npm install
   npm run build
@@ -149,60 +185,54 @@ echo "✅ Chroot jail ready! Enter jail with: sudo chroot $CHROOT_DIR /bin/bash"
 `
     },
     rootfs: {
-      filename: 'install-rootfs-2gb.sh',
+      filename: 'setup-2gb-rootfs-image.sh',
       content: `#!/usr/bin/env bash
 # ==============================================================================
-# TailNode: 2GB Raw Ext4 Disk Image Isolation Setup
+# TailNode: 2GB Raw Ext4 Disk Image Isolation & Extension
+# Developed by GM Ripon Developer
 # ==============================================================================
 set -e
 IMAGE_PATH="$HOME/tailhost_2gb.img"
 MOUNT_POINT="$HOME/tailhost"
 
-echo "==> [1/4] Creating 2048 MB raw block storage image..."
+echo "==> [1/3] Creating 2048 MB raw block storage image..."
 dd if=/dev/zero of=$IMAGE_PATH bs=1M count=2048 status=progress
-
-echo "==> [2/4] Formatting image with Ext4 filesystem..."
 mkfs.ext4 -F -L TAILHOST $IMAGE_PATH
 
-echo "==> [3/4] Mounting 2GB image to $MOUNT_POINT..."
+echo "==> [2/3] Mounting 2GB image to $MOUNT_POINT..."
 mkdir -p $MOUNT_POINT
 sudo mount -o loop $IMAGE_PATH $MOUNT_POINT
 sudo chown -R $USER:$USER $MOUNT_POINT
-
 mkdir -p $MOUNT_POINT/apps $MOUNT_POINT/logs $MOUNT_POINT/cache
 
-echo "==> [4/4] Verifying quota with df -h..."
-df -h $MOUNT_POINT
-
+echo "==> [3/3] How to extend storage from 2GB to 4GB or more later:"
+echo "truncate -s +2048M $IMAGE_PATH"
+echo "sudo resize2fs $IMAGE_PATH"
 echo "✅ 2GB hardware quota partition mounted and active at $MOUNT_POINT!"
 `
     },
-    tailscale: {
-      filename: 'setup-tailscale-funnel.sh',
+    tunnels: {
+      filename: 'setup-all-tunnels.sh',
       content: `#!/usr/bin/env bash
 # ==============================================================================
-# Tailscale Public HTTPS Funnel & Userspace Setup
+# TailNode: Multi-Tunnel Public HTTPS Setup (Cloudflare, Tailscale, ngrok)
+# Developed by GM Ripon Developer
 # ==============================================================================
 set -e
 
-# 1. Install Tailscale
-if ! command -v tailscale &> /dev/null; then
-  curl -fsSL https://tailscale.com/install.sh | sh
-fi
+echo "==> [Option 1] Cloudflare Quick Tunnel (Free & Open Source, No Port Forwarding)"
+echo "cloudflared tunnel --url http://localhost:3000"
 
-# 2. Authenticate and set user operator permissions
-sudo tailscale up --operator=$USER
+echo "==> [Option 2] Tailscale Public HTTPS Funnel"
+echo "sudo tailscale up --operator=$USER"
+echo "tailscale funnel --bg 3000"
 
-# 3. Print node address and magic DNS
-echo "Your Tailscale IPv4: $(tailscale ip -4)"
-echo "Your MagicDNS: $(tailscale status --json | grep -o '"DNSName":"[^"]*' | head -1 | cut -d'"' -f4)"
+echo "==> [Option 3] ngrok Instant HTTPS Ingress"
+echo "ngrok config add-authtoken YOUR_TOKEN"
+echo "ngrok http 3000"
 
-# 4. Enable public HTTPS Funnel on port 3000
-tailscale funnel --bg 3000
-
-# 5. Check status
-tailscale funnel status
-echo "✅ Public Funnel activated!"
+echo "==> [Option 4] Caddy Automatic Let's Encrypt HTTPS"
+echo "caddy reverse-proxy --from yourdomain.com --to localhost:3000"
 `
     }
   };
@@ -228,11 +258,16 @@ echo "✅ Public Funnel activated!"
               <Terminal className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-bold text-white">
-                Multi-Environment Installation & Tailscale Guide
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-bold text-white">
+                  Installation Guides & Ingress Setup
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-800 text-cyan-400">
+                  Dev: GM Ripon
+                </span>
+              </div>
               <p className="text-xs text-neutral-400">
-                Mainline Ubuntu AMD64, PRoot Rootless, Chroot Jail, 2GB Rootfs Image & Funnel.
+                Termux Native, PRoot-Distro Ubuntu 24.04, Mainline AMD64, 2GB Rootfs, and Tunnels.
               </p>
             </div>
           </div>
@@ -244,10 +279,34 @@ echo "✅ Public Funnel activated!"
         {/* Target Switcher Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-neutral-800 text-xs font-medium shrink-0">
           <button
+            onClick={() => setActiveTarget('termux_pkg')}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+              activeTarget === 'termux_pkg'
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-bold'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-850'
+            }`}
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+            <span>Termux (pkg Rooted & Non-Rooted)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTarget('termux_proot')}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+              activeTarget === 'termux_proot'
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-bold'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-850'
+            }`}
+          >
+            <Boxes className="h-3.5 w-3.5" />
+            <span>Termux PRoot (Ubuntu 24.04)</span>
+          </button>
+
+          <button
             onClick={() => setActiveTarget('mainline')}
             className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
               activeTarget === 'mainline'
-                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-bold'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-850'
             }`}
           >
@@ -256,70 +315,145 @@ echo "✅ Public Funnel activated!"
           </button>
 
           <button
-            onClick={() => setActiveTarget('proot')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-              activeTarget === 'proot'
-                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-850'
-            }`}
-          >
-            <Boxes className="h-3.5 w-3.5" />
-            <span>PRoot (Rootless)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTarget('chroot')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-              activeTarget === 'chroot'
-                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-850'
-            }`}
-          >
-            <ShieldCheck className="h-3.5 w-3.5" />
-            <span>Chroot Jail</span>
-          </button>
-
-          <button
             onClick={() => setActiveTarget('rootfs')}
             className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
               activeTarget === 'rootfs'
-                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-bold'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-850'
             }`}
           >
             <HardDrive className="h-3.5 w-3.5" />
-            <span>2GB Raw Rootfs</span>
+            <span>2GB Rootfs & Extension</span>
           </button>
 
           <button
-            onClick={() => setActiveTarget('tailscale')}
+            onClick={() => setActiveTarget('tunnels')}
             className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-              activeTarget === 'tailscale'
-                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+              activeTarget === 'tunnels'
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-bold'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-850'
             }`}
           >
-            <Globe className="h-3.5 w-3.5" />
-            <span>Tailscale & Funnel</span>
+            <Cloud className="h-3.5 w-3.5" />
+            <span>Cloudflare / ngrok / Tailscale</span>
           </button>
         </div>
 
         {/* Dynamic Content Scroll Area */}
         <div className="flex-1 overflow-y-auto space-y-4 pr-1 font-mono text-xs">
+          {/* Termux pkg Tab */}
+          {activeTarget === 'termux_pkg' && (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-850 text-neutral-300 font-sans text-xs leading-relaxed">
+                <span className="font-semibold text-white">Termux Mobile Native (Both Rooted & Non-Rooted): </span>
+                Runs directly in Termux userland without full virtualization. Perfect for turning Android phones into battery-efficient web servers with Node.js, Python Flask, and PHP.
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
+                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
+                  <span>1. Install Node.js, Python, PHP & Git via pkg</span>
+                  <button
+                    onClick={() => handleCopy(`pkg update -y && pkg install -y nodejs-lts git python php curl build-essential openssh`, 'tp1')}
+                    className="text-neutral-400 hover:text-white flex items-center gap-1"
+                  >
+                    {copiedKey === 'tp1' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedKey === 'tp1' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
+                  pkg update -y && pkg install -y nodejs-lts git python php curl build-essential
+                </pre>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
+                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
+                  <span>2. Clone TailNode from GitHub & Build</span>
+                  <button
+                    onClick={() => handleCopy(`git clone https://github.com/gmripon/tailnode-host.git\ncd tailnode-host\nnpm install && npm run build`, 'tp2')}
+                    className="text-neutral-400 hover:text-white flex items-center gap-1"
+                  >
+                    {copiedKey === 'tp2' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedKey === 'tp2' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
+                  git clone https://github.com/gmripon/tailnode-host.git{'\n'}cd tailnode-host && npm install && npm run build
+                </pre>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
+                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
+                  <span>3. Rooted Users Optional: Access Port 80 & Raw Block Devices</span>
+                  <button
+                    onClick={() => handleCopy(`tsu -c "npm start -- --port=80"`, 'tp3')}
+                    className="text-neutral-400 hover:text-white flex items-center gap-1"
+                  >
+                    {copiedKey === 'tp3' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedKey === 'tp3' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <pre className="p-2 rounded bg-neutral-900 text-amber-300 overflow-x-auto select-all">
+                  # Non-rooted uses port 3000 (default){'\n'}# Rooted devices (Magisk/tsu) can bind to standard port 80:{'\n'}tsu -c "npm start"
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Termux PRoot Ubuntu 24.04 Tab */}
+          {activeTarget === 'termux_proot' && (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-850 text-neutral-300 font-sans text-xs leading-relaxed">
+                <span className="font-semibold text-white">Termux PRoot-Distro Ubuntu 24.04 LTS (Noble): </span>
+                Installs a complete, true Ubuntu 24.04 environment on your phone. Provides full apt package management, system tools, and compatibility with all mainline packages without needing root!
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
+                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
+                  <span>1. Install proot-distro & Ubuntu 24.04</span>
+                  <button
+                    onClick={() => handleCopy(`pkg update -y\npkg install -y proot-distro git curl\nproot-distro install ubuntu`, 'tpr1')}
+                    className="text-neutral-400 hover:text-white flex items-center gap-1"
+                  >
+                    {copiedKey === 'tpr1' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedKey === 'tpr1' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
+                  pkg install -y proot-distro{'\n'}proot-distro install ubuntu
+                </pre>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
+                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
+                  <span>2. Login to Ubuntu 24.04 & Install Web Host</span>
+                  <button
+                    onClick={() => handleCopy(`proot-distro login ubuntu\n# Inside Ubuntu 24.04:\napt update && apt install -y nodejs npm git python3 python3-flask php\ngit clone https://github.com/gmripon/tailnode-host.git\ncd tailnode-host && npm install && npm run build && npm start`, 'tpr2')}
+                    className="text-neutral-400 hover:text-white flex items-center gap-1"
+                  >
+                    {copiedKey === 'tpr2' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedKey === 'tpr2' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
+                  proot-distro login ubuntu{'\n'}apt update && apt install -y nodejs npm git python3 python3-flask php{'\n'}git clone https://github.com/gmripon/tailnode-host.git{'\n'}cd tailnode-host && npm install && npm run build && npm start
+                </pre>
+              </div>
+            </div>
+          )}
+
           {/* Mainline Tab */}
           {activeTarget === 'mainline' && (
             <div className="space-y-3">
               <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-850 text-neutral-300 font-sans text-xs leading-relaxed">
-                <span className="font-semibold text-white">Recommended for AMD64 Desktop & Server: </span>
-                Installs directly on Ubuntu 22.04/24.04 bare-metal. Uses PM2-style process control, creates the isolated 2GB hosting tree, and configures Tailscale Funnel.
+                <span className="font-semibold text-white">Mainline AMD64 Desktop & Server: </span>
+                Installs natively on Ubuntu 22.04 or 24.04 physical workstation or VPS.
               </div>
 
-              {/* Step 1 */}
               <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
                 <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>1. Clone Repository & Enter Directory</span>
+                  <span>1. Clone Repository & Setup</span>
                   <button
-                    onClick={() => handleCopy(`git clone https://github.com/your-username/tailnode-host.git\ncd tailnode-host`, 'm1')}
+                    onClick={() => handleCopy(`git clone https://github.com/gmripon/tailnode-host.git\ncd tailnode-host\nnpm install && npm run build\nnpm start`, 'm1')}
                     className="text-neutral-400 hover:text-white flex items-center gap-1"
                   >
                     {copiedKey === 'm1' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
@@ -327,192 +461,25 @@ echo "✅ Public Funnel activated!"
                   </button>
                 </div>
                 <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  git clone https://github.com/your-username/tailnode-host.git{'\n'}cd tailnode-host
-                </pre>
-              </div>
-
-              {/* Step 2 */}
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>2. Install Node.js 20 LTS & Build Panel</span>
-                  <button
-                    onClick={() => handleCopy(`curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -\nsudo apt-get install -y nodejs\nnpm install && npm run build`, 'm2')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'm2' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'm2' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  npm install && npm run build
-                </pre>
-              </div>
-
-              {/* Step 3 */}
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>3. Prepare 2GB Storage Isolation Sandbox</span>
-                  <button
-                    onClick={() => handleCopy(`mkdir -p /home/$USER/tailhost/apps /home/$USER/tailhost/logs /home/$USER/tailhost/cache`, 'm3')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'm3' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'm3' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  mkdir -p /home/$USER/tailhost/apps /home/$USER/tailhost/logs /home/$USER/tailhost/cache
-                </pre>
-              </div>
-
-              {/* Step 4 */}
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>4. Start TailNode Host</span>
-                  <button
-                    onClick={() => handleCopy(`npm start`, 'm4')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'm4' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'm4' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-emerald-400 overflow-x-auto select-all font-bold">
-                  npm start
+                  git clone https://github.com/gmripon/tailnode-host.git{'\n'}cd tailnode-host && npm install && npm run build && npm start
                 </pre>
               </div>
             </div>
           )}
 
-          {/* PRoot Tab */}
-          {activeTarget === 'proot' && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-850 text-neutral-300 font-sans text-xs leading-relaxed">
-                <span className="font-semibold text-white">Rootless / Unprivileged Environment: </span>
-                Ideal for Termux on Android, restricted university servers, or running without root access. Emulates `chroot` and kernel syscalls entirely in userspace.
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>1. Install PRoot & Node in Userland</span>
-                  <button
-                    onClick={() => handleCopy(`pkg install -y proot proot-distro git nodejs-lts || apt-get install -y proot git nodejs npm`, 'p1')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'p1' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'p1' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  pkg install -y proot proot-distro git nodejs-lts
-                </pre>
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>2. Clone & Build TailNode</span>
-                  <button
-                    onClick={() => handleCopy(`git clone https://github.com/your-username/tailnode-host.git\ncd tailnode-host\nnpm install && npm run build`, 'p2')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'p2' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'p2' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  git clone https://github.com/your-username/tailnode-host.git{'\n'}cd tailnode-host && npm install && npm run build
-                </pre>
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>3. Tailscale Userspace Networking (No /dev/net/tun)</span>
-                  <button
-                    onClick={() => handleCopy(`tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &\ntailscale up\ntailscale funnel 3000 on`, 'p3')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'p3' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'p3' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-amber-300 overflow-x-auto select-all">
-                  # In PRoot, TUN devices aren't present. Run userspace mode:{'\n'}tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &{'\n'}tailscale up{'\n'}tailscale funnel 3000 on
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {/* Chroot Tab */}
-          {activeTarget === 'chroot' && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-850 text-neutral-300 font-sans text-xs leading-relaxed">
-                <span className="font-semibold text-white">Chroot Jail Sandbox: </span>
-                Isolate TailNode and all hosted apps inside a standalone root directory like `/var/chroot/tailhost` so malicious npm scripts cannot escape into the host desktop.
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>1. Bootstrap Minimal Ubuntu Rootfs</span>
-                  <button
-                    onClick={() => handleCopy(`sudo apt-get install -y debootstrap\nsudo mkdir -p /var/chroot/tailhost\nsudo debootstrap --arch=amd64 jammy /var/chroot/tailhost http://archive.ubuntu.com/ubuntu/`, 'c1')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'c1' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'c1' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  sudo apt-get install -y debootstrap{'\n'}sudo mkdir -p /var/chroot/tailhost{'\n'}sudo debootstrap --arch=amd64 jammy /var/chroot/tailhost http://archive.ubuntu.com/ubuntu/
-                </pre>
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>2. Bind Mount Host Kernel Virtual FS</span>
-                  <button
-                    onClick={() => handleCopy(`sudo mount --bind /dev /var/chroot/tailhost/dev\nsudo mount --bind /proc /var/chroot/tailhost/proc\nsudo mount --bind /sys /var/chroot/tailhost/sys\nsudo cp /etc/resolv.conf /var/chroot/tailhost/etc/resolv.conf`, 'c2')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'c2' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'c2' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  sudo mount --bind /dev /var/chroot/tailhost/dev{'\n'}sudo mount --bind /proc /var/chroot/tailhost/proc{'\n'}sudo mount --bind /sys /var/chroot/tailhost/sys{'\n'}sudo cp /etc/resolv.conf /var/chroot/tailhost/etc/resolv.conf
-                </pre>
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>3. Enter Chroot & Execute TailNode</span>
-                  <button
-                    onClick={() => handleCopy(`sudo chroot /var/chroot/tailhost /bin/bash\n# Inside chroot:\napt-get update && apt-get install -y curl git nodejs npm\ngit clone https://github.com/your-username/tailnode-host.git /opt/tailnode\ncd /opt/tailnode && npm install && npm run build && npm start`, 'c3')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'c3' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'c3' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <pre className="p-2 rounded bg-neutral-900 text-emerald-400 overflow-x-auto select-all">
-                  sudo chroot /var/chroot/tailhost /bin/bash
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {/* Rootfs 2GB Disk Image Tab */}
+          {/* 2GB Rootfs Tab */}
           {activeTarget === 'rootfs' && (
             <div className="space-y-3">
               <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-850 text-neutral-300 font-sans text-xs leading-relaxed">
-                <span className="font-semibold text-white">Hard 2GB Block Storage Quota: </span>
-                Creates an actual 2,048 MB raw disk image formatted with Ext4 and mounted via loop device. Enforces physical hardware boundaries so hosted sites cannot exceed 2GB under any circumstances.
+                <span className="font-semibold text-white">Default 2GB Storage & How to Extend: </span>
+                2GB (2,048 MB) is the default baseline quota. You can expand it anytime to 4GB, 8GB, 16GB, or more via the Storage Settings or using the CLI lines below.
               </div>
 
               <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
                 <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>1. Create 2GB Ext4 Sparse Image</span>
+                  <span>1. Initial 2GB Ext4 Sparse Loop Image</span>
                   <button
-                    onClick={() => handleCopy(`dd if=/dev/zero of=~/tailhost_2gb.img bs=1M count=2048 status=progress\nmkfs.ext4 -F -L TAILHOST ~/tailhost_2gb.img`, 'r1')}
+                    onClick={() => handleCopy(`dd if=/dev/zero of=~/tailhost_2gb.img bs=1M count=2048 status=progress\nmkfs.ext4 -F ~/tailhost_2gb.img\nmkdir -p ~/tailhost && sudo mount -o loop ~/tailhost_2gb.img ~/tailhost`, 'r1')}
                     className="text-neutral-400 hover:text-white flex items-center gap-1"
                   >
                     {copiedKey === 'r1' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
@@ -520,57 +487,41 @@ echo "✅ Public Funnel activated!"
                   </button>
                 </div>
                 <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  dd if=/dev/zero of=~/tailhost_2gb.img bs=1M count=2048 status=progress{'\n'}mkfs.ext4 -F -L TAILHOST ~/tailhost_2gb.img
+                  dd if=/dev/zero of=~/tailhost_2gb.img bs=1M count=2048 status=progress{'\n'}mkfs.ext4 -F ~/tailhost_2gb.img{'\n'}mkdir -p ~/tailhost && sudo mount -o loop ~/tailhost_2gb.img ~/tailhost
                 </pre>
               </div>
 
               <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
                 <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>2. Mount 2GB Partition & Set Permissions</span>
+                  <span>2. Extend Partition to 4GB, 8GB, or 16GB</span>
                   <button
-                    onClick={() => handleCopy(`mkdir -p /home/$USER/tailhost\nsudo mount -o loop ~/tailhost_2gb.img /home/$USER/tailhost\nsudo chown -R $USER:$USER /home/$USER/tailhost\nmkdir -p /home/$USER/tailhost/apps /home/$USER/tailhost/logs /home/$USER/tailhost/cache`, 'r2')}
+                    onClick={() => handleCopy(`truncate -s +2048M ~/tailhost_2gb.img\nsudo resize2fs ~/tailhost_2gb.img`, 'r2')}
                     className="text-neutral-400 hover:text-white flex items-center gap-1"
                   >
                     {copiedKey === 'r2' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                     <span>{copiedKey === 'r2' ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
-                <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  mkdir -p /home/$USER/tailhost{'\n'}sudo mount -o loop ~/tailhost_2gb.img /home/$USER/tailhost{'\n'}sudo chown -R $USER:$USER /home/$USER/tailhost
-                </pre>
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>3. Verify with df -h</span>
-                  <button
-                    onClick={() => handleCopy(`df -h /home/$USER/tailhost`, 'r3')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 'r3' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 'r3' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
                 <pre className="p-2 rounded bg-neutral-900 text-emerald-400 overflow-x-auto select-all">
-                  $ df -h /home/$USER/tailhost{'\n'}Filesystem      Size  Used Avail Use% Mounted on{'\n'}/dev/loop4      2.0G  510M  1.5G  25% /home/ubuntu/tailhost
+                  # Grow disk image file by +2GB:{'\n'}truncate -s +2048M ~/tailhost_2gb.img{'\n'}sudo resize2fs ~/tailhost_2gb.img
                 </pre>
               </div>
             </div>
           )}
 
-          {/* Tailscale & Funnel Tab */}
-          {activeTarget === 'tailscale' && (
+          {/* Tunnels Tab */}
+          {activeTarget === 'tunnels' && (
             <div className="space-y-3">
               <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-850 text-neutral-300 font-sans text-xs leading-relaxed">
-                <span className="font-semibold text-white">Public HTTPS Domain Routing: </span>
-                Tailscale Funnel exposes your local Ubuntu port to the global internet under your MagicDNS domain (e.g. <code className="text-cyan-300 font-mono">https://{magicDnsName}:3000</code>) with automatic TLS certificates.
+                <span className="font-semibold text-white">Free & Open Source Ingress: </span>
+                Cloudflare Tunnel (100% free, automatic SSL, no port forwarding), Tailscale Funnel, and ngrok.
               </div>
 
               <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
                 <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>1. Install Tailscale & Authenticate</span>
+                  <span>1. Cloudflare Quick Tunnel (Free SSL, Works on Termux & Desktop)</span>
                   <button
-                    onClick={() => handleCopy(`curl -fsSL https://tailscale.com/install.sh | sh\nsudo tailscale up --operator=$USER`, 't1')}
+                    onClick={() => handleCopy(`cloudflared tunnel --url http://localhost:3000`, 't1')}
                     className="text-neutral-400 hover:text-white flex items-center gap-1"
                   >
                     {copiedKey === 't1' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
@@ -578,13 +529,13 @@ echo "✅ Public Funnel activated!"
                   </button>
                 </div>
                 <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  curl -fsSL https://tailscale.com/install.sh | sh{'\n'}sudo tailscale up --operator=$USER
+                  cloudflared tunnel --url http://localhost:3000
                 </pre>
               </div>
 
               <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>2. Enable Public HTTPS Funnel on Port 3000</span>
+                <div className="flex items-center justify-between text-emerald-400 font-sans font-semibold">
+                  <span>2. Tailscale Public Funnel</span>
                   <button
                     onClick={() => handleCopy(`tailscale funnel --bg 3000`, 't2')}
                     className="text-neutral-400 hover:text-white flex items-center gap-1"
@@ -593,31 +544,15 @@ echo "✅ Public Funnel activated!"
                     <span>{copiedKey === 't2' ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
-                <pre className="p-2 rounded bg-neutral-900 text-emerald-400 overflow-x-auto select-all">
-                  tailscale funnel --bg 3000
-                </pre>
-              </div>
-
-              <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-850 space-y-1.5">
-                <div className="flex items-center justify-between text-cyan-400 font-sans font-semibold">
-                  <span>3. Verify Funnel Status</span>
-                  <button
-                    onClick={() => handleCopy(`tailscale funnel status`, 't3')}
-                    className="text-neutral-400 hover:text-white flex items-center gap-1"
-                  >
-                    {copiedKey === 't3' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedKey === 't3' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
                 <pre className="p-2 rounded bg-neutral-900 text-neutral-300 overflow-x-auto select-all">
-                  tailscale funnel status
+                  tailscale funnel --bg 3000
                 </pre>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer Actions */}
+        {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-neutral-800 shrink-0">
           <button
             onClick={handleDownload}

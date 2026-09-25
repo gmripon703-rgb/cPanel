@@ -110,7 +110,7 @@ export const AppsTab: React.FC<AppsTabProps> = ({
                 <div className="text-xs font-mono text-neutral-400 mt-1 flex items-center gap-2">
                   <span>Port: :{app.port}</span>
                   <span>·</span>
-                  <span>Runtime: {app.nodeVersion}</span>
+                  <span>Runtime: {app.runtimeVersion}</span>
                 </div>
               </div>
 

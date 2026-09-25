@@ -1,5 +1,7 @@
 import React from 'react';
-import { Server, Globe, Terminal, HardDrive, Layers, Download, Play } from 'lucide-react';
+import { Server, Globe, Terminal, HardDrive, Layers, Download, Play, Shield, Cloud } from 'lucide-react';
+import { DEVELOPER_NAME } from '../services/api';
+import { WhatsAppSmartButton } from './WhatsAppSmartButton';
 
 interface TopNavigationProps {
   currentView: 'landing' | 'panel';
@@ -19,42 +21,55 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
   onOpenSetupGuide,
 }) => {
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-neutral-950/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-neutral-950/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Zone 1: Single text element wordmark */}
-        <button
-          onClick={() => setCurrentView('landing')}
-          className="group flex items-center gap-2 text-left focus:outline-none"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 group-hover:border-cyan-500/60 transition-colors">
-            <Server className="h-4 w-4" />
-          </div>
-          <span className="font-semibold text-lg tracking-tight text-white hover:text-cyan-400 transition-colors">
-            TailNode
-          </span>
-        </button>
+        {/* Zone 1: Wordmark with GM Ripon Developer Badge */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setCurrentView('landing')}
+            className="group flex items-center gap-2.5 text-left focus:outline-none"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 group-hover:border-cyan-500/60 transition-colors">
+              <Server className="h-4 w-4" />
+            </div>
+            <div>
+              <span className="font-bold text-base tracking-tight text-white group-hover:text-cyan-400 transition-colors">
+                TailNode
+              </span>
+            </div>
+          </button>
 
-        {/* Zone 2: 4-6 clean text navigation links */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-400">
+          {/* Prominent Developer Badge */}
+          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-neutral-900 border border-neutral-800 text-[11px] font-mono text-cyan-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Dev: GM Ripon</span>
+          </span>
+
+          {/* Direct WhatsApp Call/Chat WB Badge */}
+          <WhatsAppSmartButton variant="compact" className="hidden sm:inline-flex" />
+        </div>
+
+        {/* Zone 2: Navigation Links */}
+        <nav className="hidden md:flex items-center gap-5 text-xs font-medium text-neutral-400">
           {currentView === 'landing' ? (
             <>
               <a href="#architecture" className="hover:text-neutral-100 transition-colors whitespace-nowrap">
                 Architecture
               </a>
               <a href="#storage-quota" className="hover:text-neutral-100 transition-colors whitespace-nowrap">
-                2GB Quota
+                2GB & Extend Quota
               </a>
-              <a href="#tailscale-funnel" className="hover:text-neutral-100 transition-colors whitespace-nowrap">
-                Tailscale Funnel
+              <a href="#tunnels-https" className="hover:text-neutral-100 transition-colors whitespace-nowrap">
+                Cloudflare / ngrok / Tailscale
               </a>
-              <a href="#features" className="hover:text-neutral-100 transition-colors whitespace-nowrap">
-                Features
+              <a href="#platforms" className="hover:text-neutral-100 transition-colors whitespace-nowrap">
+                Termux & Ubuntu
               </a>
               <button
                 onClick={onOpenSetupGuide}
-                className="hover:text-neutral-100 transition-colors whitespace-nowrap text-left"
+                className="text-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap font-mono"
               >
-                Ubuntu Guide
+                All Setup Guides
               </button>
             </>
           ) : (
@@ -62,7 +77,7 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
               <button
                 onClick={() => setActiveTab('overview')}
                 className={`transition-colors whitespace-nowrap ${
-                  activeTab === 'overview' ? 'text-cyan-400' : 'hover:text-neutral-100'
+                  activeTab === 'overview' ? 'text-cyan-400 font-semibold' : 'hover:text-neutral-100'
                 }`}
               >
                 Overview
@@ -70,31 +85,39 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
               <button
                 onClick={() => setActiveTab('apps')}
                 className={`transition-colors whitespace-nowrap ${
-                  activeTab === 'apps' ? 'text-cyan-400' : 'hover:text-neutral-100'
+                  activeTab === 'apps' ? 'text-cyan-400 font-semibold' : 'hover:text-neutral-100'
                 }`}
               >
-                Web Apps
+                Apps (Node/Flask/Static)
               </button>
               <button
                 onClick={() => setActiveTab('storage')}
                 className={`transition-colors whitespace-nowrap ${
-                  activeTab === 'storage' ? 'text-cyan-400' : 'hover:text-neutral-100'
+                  activeTab === 'storage' ? 'text-cyan-400 font-semibold' : 'hover:text-neutral-100'
                 }`}
               >
-                2GB Storage
+                Storage & Extend Quota
               </button>
               <button
                 onClick={() => setActiveTab('tailscale')}
                 className={`transition-colors whitespace-nowrap ${
-                  activeTab === 'tailscale' ? 'text-cyan-400' : 'hover:text-neutral-100'
+                  activeTab === 'tailscale' ? 'text-cyan-400 font-semibold' : 'hover:text-neutral-100'
                 }`}
               >
-                Tailscale Funnel
+                Tunnels (CF/ngrok/TS)
+              </button>
+              <button
+                onClick={() => setActiveTab('npm')}
+                className={`transition-colors whitespace-nowrap ${
+                  activeTab === 'npm' ? 'text-cyan-400 font-semibold' : 'hover:text-neutral-100'
+                }`}
+              >
+                NPM & Python Runtimes
               </button>
               <button
                 onClick={() => setActiveTab('terminal')}
                 className={`transition-colors whitespace-nowrap ${
-                  activeTab === 'terminal' ? 'text-cyan-400' : 'hover:text-neutral-100'
+                  activeTab === 'terminal' ? 'text-cyan-400 font-semibold' : 'hover:text-neutral-100'
                 }`}
               >
                 Terminal & Logs
@@ -103,23 +126,23 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
           )}
         </nav>
 
-        {/* Zone 3: 1-2 primary actions */}
+        {/* Zone 3: Primary Actions */}
         <div className="flex items-center gap-3">
           {currentView === 'landing' ? (
             <>
               <button
                 onClick={onOpenSetupGuide}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-300 bg-neutral-900 border border-neutral-800 rounded-lg hover:bg-neutral-800 hover:text-white transition-colors whitespace-nowrap"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-300 bg-neutral-900 border border-neutral-800 rounded-lg hover:bg-neutral-850 hover:text-white transition-colors whitespace-nowrap"
               >
                 <Download className="h-3.5 w-3.5 text-neutral-400" />
-                <span>Clone & Install</span>
+                <span>Clone & Termux Setup</span>
               </button>
               <button
                 onClick={() => setCurrentView('panel')}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-neutral-950 bg-cyan-400 rounded-lg hover:bg-cyan-300 transition-colors shadow-sm shadow-cyan-500/20 whitespace-nowrap"
               >
                 <Play className="h-3.5 w-3.5 fill-current" />
-                <span>Launch cPanel</span>
+                <span>Open cPanel</span>
               </button>
             </>
           ) : (
@@ -128,7 +151,7 @@ export const TopNavigation: React.FC<TopNavigationProps> = ({
                 onClick={() => setCurrentView('landing')}
                 className="px-3 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-200 transition-colors whitespace-nowrap"
               >
-                Docs & Overview
+                Docs Overview
               </button>
               <button
                 onClick={onOpenDeploy}

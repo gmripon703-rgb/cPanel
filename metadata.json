@@ -1,6 +1,6 @@
 {
   "name": "TailNode - Ubuntu Desktop Web Host & cPanel",
-  "description": "Modern self-hosted web app & Node.js hosting cPanel for AMD64 Ubuntu Desktop with Tailscale public access and 2GB isolated storage quota.",
+  "description": "Modern self-hosted web app & Node.js hosting cPanel developed by GM Ripon for AMD64 Ubuntu Desktop & Termux with 2GB extendable storage and free HTTPS tunnels.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

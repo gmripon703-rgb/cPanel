@@ -1,12 +1,44 @@
-import { HostedApp, SystemMetrics, StorageFile } from '../types/hosting';
+import { HostedApp, SystemMetrics, StorageFile, TunnelConfig } from '../types/hosting';
+
+export const DEVELOPER_NAME = 'GM Ripon Developer';
+
+const defaultTunnels: TunnelConfig = {
+  tailscale: {
+    enabled: true,
+    connected: true,
+    nodeIp: '100.84.120.45',
+    magicDnsName: 'ubuntu-desktop.tailnet.ts.net',
+    funnelActive: true
+  },
+  cloudflare: {
+    enabled: true,
+    activeTunnelUrl: 'https://tailnode-tunnel.trycloudflare.com',
+    installed: true,
+    mode: 'quick'
+  },
+  ngrok: {
+    enabled: false,
+    activeTunnelUrl: 'https://cpanel-ripon.ngrok-free.app',
+    authtokenConfigured: true,
+    installed: true
+  },
+  caddy: {
+    enabled: false,
+    domain: 'myhost.example.com',
+    autoHttps: true,
+    installed: true
+  }
+};
 
 const defaultMetrics: SystemMetrics = {
   platform: 'linux',
-  arch: 'x64',
+  arch: 'x64 / aarch64 (ARM64)',
   hostname: 'ubuntu-amd64-desktop',
   uptime: 184500,
   nodeVersion: 'v20.18.0',
-  cpuModel: 'AMD Ryzen 7 7800X3D (8-Core, 16-Threads)',
+  pythonVersion: 'Python 3.12.3',
+  developer: DEVELOPER_NAME,
+  cpuModel: 'AMD Ryzen 7 / ARM Cortex-A78 (8-Core)',
   cpuCores: 8,
   memory: {
     totalMb: 32140,
@@ -16,12 +48,16 @@ const defaultMetrics: SystemMetrics = {
   },
   storage2GBQuota: {
     allocatedLimitMb: 2048,
-    usedMb: 509.9,
-    freeMb: 1538.1,
-    percentUsed: 24.9,
+    isDefault2GB: true,
+    usedMb: 642.4,
+    freeMb: 1405.6,
+    percentUsed: 31.3,
     isolatedPath: '/home/ubuntu/tailhost/apps',
     nodeModulesCacheMb: 72.0,
-    logsMb: 1.85
+    logsMb: 1.85,
+    quotaHistory: [
+      { date: '2026-03-24 10:00', limitMb: 2048, reason: 'Default 2GB sandbox initialized on AMD64 / Termux host' }
+    ]
   },
   tailscale: {
     connected: true,
@@ -33,7 +69,8 @@ const defaultMetrics: SystemMetrics = {
     funnelGloballyEnabled: true,
     exitNodeActive: false,
     taildropAvailable: true
-  }
+  },
+  tunnels: defaultTunnels
 };
 
 export async function fetchSystemMetrics(): Promise<SystemMetrics> {
@@ -68,9 +105,12 @@ export async function fetchHostedApps(): Promise<HostedApp[]> {
       cpuPercent: 1.8,
       diskMb: 248.0,
       uptimeSeconds: 148200,
-      nodeVersion: 'v20.18.0',
-      gitRepo: 'https://github.com/user/express-shop-backend.git',
+      runtimeVersion: 'Node.js v20.18.0',
+      gitRepo: 'https://github.com/gmripon/express-shop-backend.git',
       tailscalePublicUrl: 'https://ubuntu-desktop.tailnet.ts.net:4001',
+      cloudflareUrl: 'https://ecommerce-api.trycloudflare.com',
+      ngrokUrl: 'https://a94f-103-84-12.ngrok-free.app',
+      activeTunnel: 'cloudflare',
       funnelEnabled: true,
       env: {
         NODE_ENV: 'production',
@@ -79,6 +119,31 @@ export async function fetchHostedApps(): Promise<HostedApp[]> {
         CORS_ORIGIN: '*'
       },
       createdAt: '2026-03-10T10:15:00Z'
+    },
+    {
+      id: 'app-flask-service',
+      name: 'python-flask-analytics',
+      type: 'flask',
+      port: 5500,
+      status: 'online',
+      memoryMb: 95.0,
+      cpuPercent: 1.2,
+      diskMb: 132.5,
+      uptimeSeconds: 84200,
+      runtimeVersion: 'Python 3.12 (WSGI Flask/Gunicorn)',
+      gitRepo: 'https://github.com/gmripon/flask-analytics-server.git',
+      tailscalePublicUrl: 'https://ubuntu-desktop.tailnet.ts.net:5500',
+      cloudflareUrl: 'https://flask-analytics.trycloudflare.com',
+      ngrokUrl: 'https://b12c-103-84-12.ngrok-free.app',
+      activeTunnel: 'tailscale',
+      funnelEnabled: true,
+      env: {
+        FLASK_ENV: 'production',
+        PORT: '5500',
+        PYTHONUNBUFFERED: '1',
+        SECRET_KEY: 'tailnode-flask-secret-key'
+      },
+      createdAt: '2026-03-11T12:00:00Z'
     },
     {
       id: 'app-web-landing',
@@ -90,12 +155,15 @@ export async function fetchHostedApps(): Promise<HostedApp[]> {
       cpuPercent: 0.6,
       diskMb: 185.4,
       uptimeSeconds: 96400,
-      nodeVersion: 'v22.12.0',
-      gitRepo: 'https://github.com/user/react-client-portal.git',
+      runtimeVersion: 'Node.js v22.12.0 (Vite)',
+      gitRepo: 'https://github.com/gmripon/react-client-portal.git',
       tailscalePublicUrl: 'https://ubuntu-desktop.tailnet.ts.net:5000',
+      cloudflareUrl: 'https://web-portal.trycloudflare.com',
+      ngrokUrl: '',
+      activeTunnel: 'cloudflare',
       funnelEnabled: true,
       env: {
-        VITE_API_ENDPOINT: 'https://ubuntu-desktop.tailnet.ts.net:4001/api',
+        VITE_API_ENDPOINT: 'https://ecommerce-api.trycloudflare.com/api',
         NODE_ENV: 'production'
       },
       createdAt: '2026-03-12T14:30:00Z'
@@ -110,9 +178,12 @@ export async function fetchHostedApps(): Promise<HostedApp[]> {
       cpuPercent: 0.4,
       diskMb: 76.5,
       uptimeSeconds: 245000,
-      nodeVersion: 'v20.18.0',
-      gitRepo: 'https://github.com/user/node-telemetry-worker.git',
+      runtimeVersion: 'Node.js v20.18.0',
+      gitRepo: 'https://github.com/gmripon/node-telemetry-worker.git',
       tailscalePublicUrl: 'https://ubuntu-desktop.tailnet.ts.net:8080',
+      cloudflareUrl: '',
+      ngrokUrl: '',
+      activeTunnel: 'none',
       funnelEnabled: false,
       env: {
         METRICS_INTERVAL: '5000',
@@ -121,6 +192,59 @@ export async function fetchHostedApps(): Promise<HostedApp[]> {
       createdAt: '2026-03-08T09:00:00Z'
     }
   ];
+}
+
+export async function extendStorageQuota(newLimitMb: number, reason?: string) {
+  try {
+    const res = await fetch('/api/storage/quota', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newLimitMb, reason })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('API /api/storage/quota failed, simulating locally', e);
+  }
+  return {
+    success: true,
+    allocatedLimitMb: newLimitMb,
+    isDefault2GB: newLimitMb === 2048,
+    message: `Quota adjusted to ${newLimitMb} MB`
+  };
+}
+
+export async function setAppTunnel(appId: string, tunnelType: 'tailscale' | 'cloudflare' | 'ngrok' | 'caddy' | 'none') {
+  try {
+    const res = await fetch(`/api/apps/${appId}/tunnel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tunnelType })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('API /api/apps/:id/tunnel failed', e);
+  }
+  return { success: true };
+}
+
+export async function toggleTunnelService(service: 'cloudflare' | 'ngrok' | 'tailscale' | 'caddy', enabled: boolean, token?: string) {
+  try {
+    const res = await fetch('/api/tunnels/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ service, enabled, token })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('API toggle tunnel failed', e);
+  }
+  return { success: true };
 }
 
 export async function createApp(appData: Partial<HostedApp>): Promise<HostedApp> {
@@ -138,19 +262,25 @@ export async function createApp(appData: Partial<HostedApp>): Promise<HostedApp>
   }
 
   const port = appData.port || 3000 + Math.floor(Math.random() * 5000);
+  const isFlask = appData.type === 'flask' || appData.type === 'python' || appData.type === 'fastapi';
+  const slug = (appData.name || 'custom-app').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
   return {
     id: `app-${Date.now()}`,
-    name: appData.name || 'custom-node-app',
+    name: slug,
     type: appData.type || 'nodejs',
     port,
     status: 'online',
-    memoryMb: 42.0,
+    memoryMb: isFlask ? 85.0 : 42.0,
     cpuPercent: 0.2,
-    diskMb: 52.4,
+    diskMb: isFlask ? 95.0 : 52.4,
     uptimeSeconds: 0,
-    nodeVersion: appData.nodeVersion || 'v20.18.0',
+    runtimeVersion: appData.runtimeVersion || (isFlask ? 'Python 3.12 (Flask/Gunicorn)' : 'Node.js v20.18.0'),
     gitRepo: appData.gitRepo || '',
     tailscalePublicUrl: `https://ubuntu-desktop.tailnet.ts.net:${port}`,
+    cloudflareUrl: `https://${slug}.trycloudflare.com`,
+    ngrokUrl: `https://${slug}.ngrok-free.app`,
+    activeTunnel: 'cloudflare',
     funnelEnabled: true,
     env: appData.env || { NODE_ENV: 'production', PORT: port.toString() },
     createdAt: new Date().toISOString()
@@ -204,9 +334,9 @@ export async function fetchAppLogs(appId: string): Promise<string[]> {
     console.warn('API logs failed', e);
   }
   return [
-    `[2026-03-24T12:00:00Z] [pm2] Daemon monitoring ${appId}`,
-    `[2026-03-24T12:00:01Z] [node] Process online on Ubuntu Desktop AMD64`,
-    `[2026-03-24T12:00:02Z] [tailscale] Public HTTPS Funnel active via MagicDNS`
+    `[2026-03-24T12:00:00Z] [daemon] Process monitoring ${appId} on AMD64 / Termux host`,
+    `[2026-03-24T12:00:01Z] [runtime] Service online with 2GB default isolated quota`,
+    `[2026-03-24T12:00:02Z] [tunnel] Public HTTPS mapped via Cloudflare / Tailscale Funnel`
   ];
 }
 
@@ -225,6 +355,9 @@ export async function fetchStorageFiles(): Promise<StorageFile[]> {
     { path: '/home/ubuntu/tailhost/apps/ecommerce-api/package.json', sizeKb: 2.1, modified: '2026-03-24 10:45', type: 'file' },
     { path: '/home/ubuntu/tailhost/apps/ecommerce-api/.env', sizeKb: 0.8, modified: '2026-03-24 10:40', type: 'file' },
     { path: '/home/ubuntu/tailhost/apps/ecommerce-api/node_modules/', sizeKb: 248000, modified: '2026-03-24 10:50', type: 'dir' },
+    { path: '/home/ubuntu/tailhost/apps/flask-service/app.py', sizeKb: 5.6, modified: '2026-03-24 10:15', type: 'file' },
+    { path: '/home/ubuntu/tailhost/apps/flask-service/requirements.txt', sizeKb: 0.9, modified: '2026-03-24 10:10', type: 'file' },
+    { path: '/home/ubuntu/tailhost/apps/flask-service/.venv/', sizeKb: 132500, modified: '2026-03-24 10:12', type: 'dir' },
     { path: '/home/ubuntu/tailhost/apps/frontend-web/dist/index.html', sizeKb: 4.8, modified: '2026-03-24 09:12', type: 'file' },
     { path: '/home/ubuntu/tailhost/apps/frontend-web/node_modules/', sizeKb: 185000, modified: '2026-03-24 09:10', type: 'dir' },
     { path: '/home/ubuntu/tailhost/apps/system-daemon/worker.js', sizeKb: 6.4, modified: '2026-03-23 18:00', type: 'file' },
@@ -244,7 +377,7 @@ export async function cleanStorageCache(): Promise<{ success: boolean; message: 
   }
   return {
     success: true,
-    message: 'Cleaned npm build cache and rotated logs. Reclaimed 72 MB storage in 2GB sandbox.',
+    message: 'Cleaned npm/pip build cache and rotated logs. Reclaimed 72 MB storage.',
     freedMb: 72
   };
 }

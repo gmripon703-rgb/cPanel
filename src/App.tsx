@@ -9,6 +9,7 @@ import { LandingPage } from './components/LandingPage';
 import { HostingPanel } from './components/HostingPanel';
 import { DeployModal } from './components/panel/DeployModal';
 import { UbuntuGuideModal } from './components/panel/UbuntuGuideModal';
+import { WhatsAppSmartButton } from './components/WhatsAppSmartButton';
 import { 
   fetchSystemMetrics, 
   fetchHostedApps, 
@@ -17,7 +18,10 @@ import {
   executeAppAction, 
   deleteAppApi, 
   toggleAppFunnelApi, 
-  cleanStorageCache 
+  cleanStorageCache,
+  extendStorageQuota,
+  setAppTunnel,
+  DEVELOPER_NAME
 } from './services/api';
 import { HostedApp, StorageFile, SystemMetrics } from './types/hosting';
 
@@ -27,11 +31,13 @@ export default function App() {
   
   const [metrics, setMetrics] = useState<SystemMetrics>({
     platform: 'linux',
-    arch: 'x64',
+    arch: 'x64 / aarch64 (ARM64)',
     hostname: 'ubuntu-amd64-desktop',
     uptime: 184500,
     nodeVersion: 'v20.18.0',
-    cpuModel: 'AMD Ryzen 7 7800X3D (8-Core)',
+    pythonVersion: 'Python 3.12.3',
+    developer: DEVELOPER_NAME,
+    cpuModel: 'AMD Ryzen 7 / ARM Cortex (8-Core)',
     cpuCores: 8,
     memory: {
       totalMb: 32140,
@@ -41,12 +47,16 @@ export default function App() {
     },
     storage2GBQuota: {
       allocatedLimitMb: 2048,
-      usedMb: 509.9,
-      freeMb: 1538.1,
-      percentUsed: 24.9,
+      isDefault2GB: true,
+      usedMb: 642.4,
+      freeMb: 1405.6,
+      percentUsed: 31.3,
       isolatedPath: '/home/ubuntu/tailhost/apps',
       nodeModulesCacheMb: 72.0,
-      logsMb: 1.85
+      logsMb: 1.85,
+      quotaHistory: [
+        { date: '2026-03-24 10:00', limitMb: 2048, reason: 'Default 2GB sandbox initialized on AMD64 / Termux host' }
+      ]
     },
     tailscale: {
       connected: true,
@@ -58,6 +68,33 @@ export default function App() {
       funnelGloballyEnabled: true,
       exitNodeActive: false,
       taildropAvailable: true
+    },
+    tunnels: {
+      tailscale: {
+        enabled: true,
+        connected: true,
+        nodeIp: '100.84.120.45',
+        magicDnsName: 'ubuntu-desktop.tailnet.ts.net',
+        funnelActive: true
+      },
+      cloudflare: {
+        enabled: true,
+        activeTunnelUrl: 'https://tailnode-tunnel.trycloudflare.com',
+        installed: true,
+        mode: 'quick'
+      },
+      ngrok: {
+        enabled: false,
+        activeTunnelUrl: 'https://cpanel-ripon.ngrok-free.app',
+        authtokenConfigured: true,
+        installed: true
+      },
+      caddy: {
+        enabled: false,
+        domain: 'myhost.example.com',
+        autoHttps: true,
+        installed: true
+      }
     }
   });
 
@@ -87,20 +124,53 @@ export default function App() {
     const created = await createApp(appData);
     setApps(prev => [...prev, created]);
     
-    // Recalculate 2GB storage
+    // Recalculate storage quota with current limit
+    const currentLimit = metrics.storage2GBQuota.allocatedLimitMb;
     const newUsed = metrics.storage2GBQuota.usedMb + created.diskMb;
     setMetrics(prev => ({
       ...prev,
       storage2GBQuota: {
         ...prev.storage2GBQuota,
         usedMb: parseFloat(newUsed.toFixed(1)),
-        freeMb: parseFloat(Math.max(0, 2048 - newUsed).toFixed(1)),
-        percentUsed: parseFloat(((newUsed / 2048) * 100).toFixed(1))
+        freeMb: parseFloat(Math.max(0, currentLimit - newUsed).toFixed(1)),
+        percentUsed: parseFloat(((newUsed / currentLimit) * 100).toFixed(1))
       }
     }));
 
-    // Switch to apps tab
     setActiveTab('apps');
+  };
+
+  const handleExtendQuota = async (newLimitMb: number, reason?: string) => {
+    const res = await extendStorageQuota(newLimitMb, reason);
+    if (res.success) {
+      setMetrics(prev => {
+        const used = prev.storage2GBQuota.usedMb;
+        return {
+          ...prev,
+          storage2GBQuota: {
+            ...prev.storage2GBQuota,
+            allocatedLimitMb: newLimitMb,
+            isDefault2GB: newLimitMb === 2048,
+            freeMb: parseFloat(Math.max(0, newLimitMb - used).toFixed(1)),
+            percentUsed: parseFloat(((used / newLimitMb) * 100).toFixed(1)),
+            quotaHistory: res.quotaHistory || [
+              { date: 'Just now', limitMb: newLimitMb, reason: reason || 'Quota adjusted' },
+              ...prev.storage2GBQuota.quotaHistory
+            ]
+          }
+        };
+      });
+    }
+  };
+
+  const handleSetAppTunnel = async (appId: string, tunnel: 'tailscale' | 'cloudflare' | 'ngrok' | 'caddy' | 'none') => {
+    await setAppTunnel(appId, tunnel);
+    setApps(prev => prev.map(a => {
+      if (a.id === appId) {
+        return { ...a, activeTunnel: tunnel };
+      }
+      return a;
+    }));
   };
 
   const handleAppAction = async (appId: string, action: 'start' | 'stop' | 'restart' | 'rebuild') => {
@@ -123,14 +193,15 @@ export default function App() {
     setApps(prev => prev.filter(a => a.id !== appId));
     
     if (toDelete) {
+      const currentLimit = metrics.storage2GBQuota.allocatedLimitMb;
       const newUsed = Math.max(0, metrics.storage2GBQuota.usedMb - toDelete.diskMb);
       setMetrics(prev => ({
         ...prev,
         storage2GBQuota: {
           ...prev.storage2GBQuota,
           usedMb: parseFloat(newUsed.toFixed(1)),
-          freeMb: parseFloat((2048 - newUsed).toFixed(1)),
-          percentUsed: parseFloat(((newUsed / 2048) * 100).toFixed(1))
+          freeMb: parseFloat((currentLimit - newUsed).toFixed(1)),
+          percentUsed: parseFloat(((newUsed / currentLimit) * 100).toFixed(1))
         }
       }));
     }
@@ -153,14 +224,15 @@ export default function App() {
       setCleaning(false);
       setMetrics(prev => {
         const freed = 72;
+        const currentLimit = prev.storage2GBQuota.allocatedLimitMb;
         const newUsed = Math.max(0, prev.storage2GBQuota.usedMb - freed);
         return {
           ...prev,
           storage2GBQuota: {
             ...prev.storage2GBQuota,
             usedMb: parseFloat(newUsed.toFixed(1)),
-            freeMb: parseFloat((2048 - newUsed).toFixed(1)),
-            percentUsed: parseFloat(((newUsed / 2048) * 100).toFixed(1)),
+            freeMb: parseFloat((currentLimit - newUsed).toFixed(1)),
+            percentUsed: parseFloat(((newUsed / currentLimit) * 100).toFixed(1)),
             nodeModulesCacheMb: 0
           }
         };
@@ -174,7 +246,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col selection:bg-cyan-500/20 selection:text-cyan-200">
-      {/* Top Bar Contract Navigation */}
+      {/* Top Navigation */}
       <TopNavigation
         currentView={currentView}
         setCurrentView={setCurrentView}
@@ -184,7 +256,7 @@ export default function App() {
         onOpenSetupGuide={() => setIsSetupGuideOpen(true)}
       />
 
-      {/* Main Content: Landing Page or Live Hosting Panel */}
+      {/* Main Content */}
       <div className="flex-1">
         {currentView === 'landing' ? (
           <LandingPage
@@ -204,9 +276,12 @@ export default function App() {
             setActiveTab={setActiveTab}
             onDeployClick={() => setIsDeployOpen(true)}
             onCleanCache={handleCleanCache}
+            onExtendQuota={handleExtendQuota}
             onAppAction={handleAppAction}
             onDeleteApp={handleDeleteApp}
             onToggleFunnel={handleToggleFunnel}
+            onSetAppTunnel={handleSetAppTunnel}
+            onDeployShortcutApp={handleDeployApp}
             onOpenSetupGuide={() => setIsSetupGuideOpen(true)}
             cleaning={cleaning}
             activeAppFilter={activeAppFilter}
@@ -223,40 +298,50 @@ export default function App() {
         nextPort={nextAvailablePort}
       />
 
-      {/* Ubuntu Desktop Setup & GitHub Clone Guide Modal */}
+      {/* Setup Guide Modal */}
       <UbuntuGuideModal
         isOpen={isSetupGuideOpen}
         onClose={() => setIsSetupGuideOpen(false)}
         magicDnsName={metrics.tailscale.magicDnsName}
       />
 
-      {/* Clean, quiet footer adhering to anti-slop rules */}
+      {/* Floating Smart WhatsApp Call & Chat Button */}
+      <WhatsAppSmartButton variant="floating" />
+
+      {/* Footer with Developed by GM Ripon & WB WhatsApp Call / Chat Contact */}
       <footer className="border-t border-neutral-900 bg-neutral-950 py-8 text-xs text-neutral-500">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-neutral-400">TailNode</span>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col lg:flex-row items-center justify-between gap-5">
+          <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5">
+            <span className="font-semibold text-neutral-300">TailNode Host</span>
             <span>·</span>
-            <span>AMD64 Ubuntu Desktop Self-Hosted Web cPanel</span>
+            <span className="text-cyan-400 font-mono font-medium">Developed by {DEVELOPER_NAME}</span>
             <span>·</span>
-            <span className="text-cyan-400 font-mono">2GB Quota Isolated</span>
+            <span>AMD64 Ubuntu & Termux Mobile Host</span>
+            <span>·</span>
+            <span className="text-emerald-400 font-mono">Default 2GB (Extendable)</span>
           </div>
 
-          <div className="flex items-center gap-4 text-neutral-400">
-            <button
-              onClick={() => setIsSetupGuideOpen(true)}
-              className="hover:text-white transition-colors"
-            >
-              GitHub Clone Instructions
-            </button>
-            <span>·</span>
-            <button
-              onClick={() => {
-                setCurrentView(currentView === 'landing' ? 'panel' : 'landing');
-              }}
-              className="hover:text-white transition-colors"
-            >
-              {currentView === 'landing' ? 'Go to cPanel' : 'Go to Product Overview'}
-            </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {/* Direct WhatsApp Call or Chat Smart Button */}
+            <WhatsAppSmartButton variant="footer" />
+
+            <div className="flex items-center gap-3 text-neutral-400">
+              <button
+                onClick={() => setIsSetupGuideOpen(true)}
+                className="hover:text-white transition-colors"
+              >
+                Termux & Ubuntu Setup Guides
+              </button>
+              <span>·</span>
+              <button
+                onClick={() => {
+                  setCurrentView(currentView === 'landing' ? 'panel' : 'landing');
+                }}
+                className="hover:text-white transition-colors"
+              >
+                {currentView === 'landing' ? 'Launch cPanel' : 'Landing Page'}
+              </button>
+            </div>
           </div>
         </div>
       </footer>
